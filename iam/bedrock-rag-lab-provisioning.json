@@ -113,6 +113,18 @@
         "arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/lambda/bedrock-rag-lab-*",
         "arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/lambda/bedrock-rag-lab-*:*"
       ]
+    },
+    {
+      "Sid": "BudgetsManage",
+      "Effect": "Allow",
+      "Action": ["budgets:ViewBudget", "budgets:ModifyBudget", "budgets:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CostAllocationTagManage",
+      "Effect": "Allow",
+      "Action": ["ce:ListCostAllocationTags", "ce:UpdateCostAllocationTagsStatus"],
+      "Resource": "*"
     }
   ]
 }
