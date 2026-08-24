@@ -1,0 +1,40 @@
+$ terraform destroy -auto-approve
+...
+Destroy complete! Resources: 22 destroyed.
+
+--- 검증 (bedrock-rag-lab profile, 권한 있는 scoped 조회만) ---
+
+$ aws lambda get-function --function-name bedrock-rag-lab-query
+ResourceNotFoundException: Function not found: arn:aws:lambda:ap-northeast-2:601326494743:function:bedrock-rag-lab-query
+
+$ aws iam get-role --role-name bedrock-rag-lab-kb-role
+NoSuchEntity: The role with name bedrock-rag-lab-kb-role cannot be found.
+
+$ aws iam get-role --role-name bedrock-rag-lab-lambda-query-role
+NoSuchEntity: The role with name bedrock-rag-lab-lambda-query-role cannot be found.
+
+$ aws bedrock-agent list-knowledge-bases
+{ "knowledgeBaseSummaries": [] }
+
+$ aws s3vectors list-vector-buckets
+{ "vectorBuckets": [] }
+
+$ aws apigatewayv2 get-apis --query "Items[?Name=='bedrock-rag-lab-api']"
+[]
+
+$ aws budgets describe-budgets --query "Budgets[].BudgetName"
+["My Monthly Cost Budget"]
+# bedrock-rag-lab-monthly-cap 없음 - 삭제 확인. 남은 건 이 계정에 원래 있던 다른 예산.
+
+$ aws s3 ls
+# bedrock-rag-lab-docs-* 버킷 없음. (이 실습과 무관한 다른 프로젝트 버킷 5개만 남아있음 - 이름은 비공개)
+# -> 이 계정에 다른 프로젝트가 실제로 있다는 걸 재확인. 50단계에서 태그로 예산을 좁힌 이유가 여기서 검증됨.
+
+--- 의도적으로 남겨둔 것 (Terraform 관리 밖, 다음 실습 재사용을 위해 유지) ---
+
+$ aws iam get-user --user-name bedrock-rag-lab --profile default
+bedrock-rag-lab  2026-08-24T02:01:38+00:00
+
+$ aws iam list-attached-user-policies --user-name bedrock-rag-lab --profile default
+AmazonS3FullAccess
+bedrock-rag-lab-provisioning

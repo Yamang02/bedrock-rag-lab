@@ -166,17 +166,28 @@ cd infra
 terraform destroy
 ```
 
-Budget 자체는 과금 리소스가 아니므로(무료), 다음 실습을 위해 남겨두거나 `terraform destroy`에 포함해 함께 지워도 된다 — 이번엔 다른 리소스와 함께 지운다.
+Budget 자체는 과금 리소스가 아니므로(무료), 다음 실습을 위해 남겨두거나 `terraform destroy`에 포함해 함께 지워도 된다 — 이번엔 다른 리소스와 함께 지웠다.
 
-destroy 후 확인:
+destroy 후 확인. `lambda:ListFunctions`, `iam:ListRoles` 같은 계정 전체 List 계열 action은 애초에 `bedrock-rag-lab` User에 안 줬으므로(리소스별로 scoped action만 부여), 특정 리소스를 콕 집어 조회해서 "없음(NotFound)"이 나오는지로 확인한다.
 
 ```bash
-aws s3 ls --profile bedrock-rag-lab
-aws lambda list-functions --profile bedrock-rag-lab --query "Functions[?starts_with(FunctionName, 'bedrock-rag-lab')]"
+aws lambda get-function --function-name bedrock-rag-lab-query --profile bedrock-rag-lab
+aws iam get-role --role-name bedrock-rag-lab-kb-role --profile bedrock-rag-lab
+aws iam get-role --role-name bedrock-rag-lab-lambda-query-role --profile bedrock-rag-lab
 aws bedrock-agent list-knowledge-bases --profile bedrock-rag-lab
+aws s3vectors list-vector-buckets --profile bedrock-rag-lab
+aws apigatewayv2 get-apis --profile bedrock-rag-lab --query "Items[?Name=='bedrock-rag-lab-api']"
+aws budgets describe-budgets --account-id <ACCOUNT_ID> --profile bedrock-rag-lab --query "Budgets[].BudgetName"
+aws s3 ls --profile bedrock-rag-lab
 ```
 
-모두 빈 결과가 나오면 정리 완료다.
+`ResourceNotFoundException`/`NoSuchEntity`가 나오거나 빈 배열이면 정상이다. 전체 출력은 [destroy-verification.txt](destroy-verification.txt) 참고.
+
+**부수적으로 확인된 것**: `aws s3 ls`에 `bedrock-rag-lab-*` 버킷은 안 남았지만, 이 실습과 무관한 다른 프로젝트 버킷 5개가 그대로 있었다 (이름은 비공개) — 이 계정에 정말 다른 프로젝트가 있다는 걸 재확인했고, 2번에서 예산을 계정 전체가 아니라 `Project` 태그로 좁힌 결정이 맞았다는 증거이기도 하다.
+
+## 50-cost-cleanup 완료 (2026-08-24)
+
+`terraform destroy`로 22개 리소스(Lambda, API Gateway, Knowledge Base, Data Source, S3 Vectors, S3 Bucket, IAM Role 2개, Budget, cost allocation tag)를 모두 정리했고, scoped 조회로 실제 삭제를 확인했다. `bedrock-rag-lab` IAM User와 관리형 정책(`AmazonS3FullAccess`, `bedrock-rag-lab-provisioning`)은 다음 실습에서 재사용하기 위해 의도적으로 남겨뒀다.
 
 ## 보안 체크
 
