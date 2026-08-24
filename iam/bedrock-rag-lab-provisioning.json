@@ -57,8 +57,17 @@
     {
       "Sid": "BedrockListAccountWide",
       "Effect": "Allow",
-      "Action": ["bedrock:ListKnowledgeBases"],
+      "Action": ["bedrock:ListKnowledgeBases", "bedrock:ListFoundationModels", "bedrock:ListInferenceProfiles"],
       "Resource": "*"
+    },
+    {
+      "Sid": "BedrockIngestionAndRetrieval",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:StartIngestionJob", "bedrock:GetIngestionJob", "bedrock:ListIngestionJobs",
+        "bedrock:Retrieve", "bedrock:RetrieveAndGenerate"
+      ],
+      "Resource": "arn:aws:bedrock:ap-northeast-2:<ACCOUNT_ID>:knowledge-base/*"
     }
   ]
 }
