@@ -1,0 +1,59 @@
+{
+    "retrievalResults": [
+        {
+            "content": {
+                "type": "TEXT",
+                "text": "# Project Overview 이 프로젝트는 AWS Bedrock 기반 RAG 서비스다. ## Authentication JWT 기반 인증을 사용한다. ## Database PostgreSQL을 사용한다."
+            },
+            "location": {
+                "type": "S3",
+                "s3Location": {
+                    "uri": "s3://bedrock-rag-lab-docs-481a48468464fb77ff03ab3785/project-overview.md"
+                }
+            },
+            "score": 0.6395086348056793,
+            "metadata": {
+                "x-amz-bedrock-kb-source-file-modality": "TEXT",
+                "x-amz-bedrock-kb-chunk-id": "7093443e-edd6-4bcf-81e7-0be5c1d162dd",
+                "x-amz-bedrock-kb-data-source-id": "KRXNLIOZJM"
+            }
+        },
+        {
+            "content": {
+                "type": "TEXT",
+                "text": "# API 이 프로젝트는 RAG 질의를 위한 API를 제공한다. ## Endpoint `POST /query`로 질문을 전송하면 답변을 반환한다. ## Response 응답에는 답변 텍스트와 참고한 문서 출처(citation)가 포함된다."
+            },
+            "location": {
+                "type": "S3",
+                "s3Location": {
+                    "uri": "s3://bedrock-rag-lab-docs-481a48468464fb77ff03ab3785/api.md"
+                }
+            },
+            "score": 0.6283422112464905,
+            "metadata": {
+                "x-amz-bedrock-kb-source-file-modality": "TEXT",
+                "x-amz-bedrock-kb-chunk-id": "0a5e03d4-8eee-4ee6-ab6c-00f85930c419",
+                "x-amz-bedrock-kb-data-source-id": "KRXNLIOZJM"
+            }
+        },
+        {
+            "content": {
+                "type": "TEXT",
+                "text": "# Architecture 이 프로젝트의 인프라는 Terraform으로 관리한다. ## Storage 문서는 S3 Bucket에 저장한다. ## Vector Store 임베딩 벡터는 S3 Vectors에 저장한다. ## Knowledge Base Amazon Bedrock Knowledge Base가 S3 문서를 임베딩하여 Vector Store에 저장하고, 질의 시 관련 문서를 검색한다."
+            },
+            "location": {
+                "type": "S3",
+                "s3Location": {
+                    "uri": "s3://bedrock-rag-lab-docs-481a48468464fb77ff03ab3785/architecture.md"
+                }
+            },
+            "score": 0.5869390070438385,
+            "metadata": {
+                "x-amz-bedrock-kb-source-file-modality": "TEXT",
+                "x-amz-bedrock-kb-chunk-id": "15dffc6f-d278-454c-889f-3af972e9881c",
+                "x-amz-bedrock-kb-data-source-id": "KRXNLIOZJM"
+            }
+        }
+    ],
+    "guardrailAction": null
+}

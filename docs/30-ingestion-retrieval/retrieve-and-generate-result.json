@@ -1,0 +1,38 @@
+{
+    "sessionId": "8926d702-9475-49a7-b30b-0d05f8dc0c22",
+    "output": {
+        "text": "이 프로젝트는 JWT 기반 인증을 사용한다."
+    },
+    "citations": [
+        {
+            "generatedResponsePart": {
+                "textResponsePart": {
+                    "text": "이 프로젝트는 JWT 기반 인증을 사용한다.",
+                    "span": {
+                        "start": 0,
+                        "end": 23
+                    }
+                }
+            },
+            "retrievedReferences": [
+                {
+                    "content": {
+                        "type": "TEXT",
+                        "text": "# Project Overview 이 프로젝트는 AWS Bedrock 기반 RAG 서비스다. ## Authentication JWT 기반 인증을 사용한다. ## Database PostgreSQL을 사용한다."
+                    },
+                    "location": {
+                        "type": "S3",
+                        "s3Location": {
+                            "uri": "s3://bedrock-rag-lab-docs-481a48468464fb77ff03ab3785/project-overview.md"
+                        }
+                    },
+                    "metadata": {
+                        "x-amz-bedrock-kb-source-file-modality": "TEXT",
+                        "x-amz-bedrock-kb-chunk-id": "7093443e-edd6-4bcf-81e7-0be5c1d162dd",
+                        "x-amz-bedrock-kb-data-source-id": "KRXNLIOZJM"
+                    }
+                }
+            ]
+        }
+    ]
+}
