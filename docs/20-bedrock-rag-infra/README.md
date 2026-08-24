@@ -1,69 +1,101 @@
-# 20. Bedrock RAG Infrastructure
+# 20. Bedrock RAG 인프라
 
-이 문서는 Bedrock Knowledge Base를 만들기 전에 필요한 AWS 인프라(S3 문서 버킷, IAM Service Role, S3 Vectors, Knowledge Base, Data Source)를 Terraform으로 구성하는 과정을 정리한다.
+Terraform으로 Bedrock Knowledge Base에 필요한 AWS 리소스를 구성한다.
 
-`10-terraform-basic`에서 확인한 IAM User(`bedrock-rag-lab`, S3 권한) 기반 profile을 그대로 사용한다.
+## 이번 단계에서 할 일
 
-## 완료 기준
+- RAG 문서를 저장할 S3 Bucket 생성
+- Bedrock이 사용할 IAM Role 생성
+- S3 Vectors 생성
+- Bedrock Knowledge Base 생성
+- S3 Data Source 연결
+- 샘플 문서 업로드
+
+## 전체 흐름
 
 ```text
-문서 저장용 S3 Bucket
-        ↓
-Bedrock Service IAM Role
-        ↓
-Embedding Model 호출 권한
-        ↓
-S3 Vectors (Vector Bucket + Index)
-        ↓
-bedrock-rag-lab User 자체 권한 확장 (IAM Role/S3 Vectors/Bedrock KB 생성 권한)
-        ↓
+S3 문서
+   ↓
 Bedrock Knowledge Base
-        ↓
-S3 Data Source 연결
+   ↓
+Titan Text Embeddings V2
+   ↓
+S3 Vectors
 ```
 
-이 단계에서는 아직 ingestion을 실행하지 않는다. Knowledge Base 생성과 Data Source 연결까지가 목표다. 실제 질의는 `30-ingestion-retrieval`에서 다룬다.
+## Knowledge Base란?
 
-## 사전 확인 사항
+Bedrock Knowledge Base는 **RAG에 필요한 문서 처리와 검색 과정을 연결해주는 AWS 기능**이다.
 
-작성 전에 Terraform AWS Provider의 리소스 지원 여부와 리전을 확인했다.
-
-- `aws_bedrockagent_knowledge_base`의 `storage_configuration.type = "S3_VECTORS"`가 지원된다 (OpenSearch Serverless 없이 S3 Vectors를 바로 벡터 저장소로 사용 가능).
-- `aws_s3vectors_vector_bucket`, `aws_s3vectors_index` 리소스가 존재한다 (provider `>= 6.24.0` 필요, 현재 `infra/.terraform.lock.hcl`은 `6.61.0`으로 충족).
-- `aws_bedrockagent_data_source`(S3 타입)가 존재한다.
-- Titan Text Embeddings V2, S3 Vectors 모두 `ap-northeast-2`(Seoul)에서 사용 가능하다. 리전을 바꿀 필요는 없다.
-
-## 폴더 구조
+직접 RAG를 만든다면 다음 과정을 각각 구현해야 한다.
 
 ```text
-bedrock-rag-lab/
-├── documents/
-│   ├── project-overview.md
-│   ├── architecture.md
-│   └── api.md
-│
-├── docs/
-│   └── 20-bedrock-rag-infra/
-│       └── README.md
-│
-├── iam/
-│   ├── README.md
-│   └── bedrock-rag-lab-provisioning.json
-│
-└── infra/
-    ├── versions.tf
-    ├── providers.tf
-    ├── variables.tf
-    ├── s3.tf
-    ├── s3vectors.tf
-    ├── iam.tf
-    ├── bedrock.tf
-    └── outputs.tf
+원본 문서 읽기
+    ↓
+문서를 작은 단위로 나누기 (Chunking)
+    ↓
+각 문서를 숫자 벡터로 변환 (Embedding)
+    ↓
+벡터 저장소에 저장
+    ↓
+사용자 질문과 비슷한 문서 검색
+    ↓
+검색 결과를 LLM에 전달
 ```
 
-## 1. 문서 버킷 (s3.tf)
+Knowledge Base를 사용하면 이 과정을 Bedrock에서 관리할 수 있다.
 
-`10-terraform-basic`에서 만들었던 테스트용 버킷 정의를 RAG 문서 버킷으로 확장한다.
+이번 프로젝트에서는 다음 AWS 리소스를 연결한다.
+
+| 구성 요소 | 역할 |
+| --- | --- |
+| S3 | 원본 문서 저장 |
+| Data Source | Knowledge Base가 읽을 문서 위치 지정 |
+| Titan Text Embeddings V2 | 문서와 질문을 숫자 벡터로 변환 |
+| S3 Vectors | 변환된 벡터 저장 및 검색 |
+| Knowledge Base | 문서 수집과 검색 과정 연결 |
+| Nova Micro | 검색된 내용을 바탕으로 최종 답변 생성 |
+
+Knowledge Base를 만든 것만으로 문서 검색이 바로 가능한 것은 아니다. 다음 단계에서 **문서 수집(Ingestion)**을 실행해야 한다.
+
+```text
+S3 원본 문서
+    ↓ 문서 수집
+문서를 Chunk로 분리
+    ↓
+Titan Text Embeddings V2
+    ↓
+숫자 벡터 생성
+    ↓
+S3 Vectors 저장
+```
+
+문서 수집이 끝난 뒤 사용자가 질문하면 반대 방향으로 검색이 진행된다.
+
+```text
+사용자 질문
+    ↓
+질문을 숫자 벡터로 변환
+    ↓
+S3 Vectors에서 비슷한 문서 검색
+    ↓
+관련 문서 반환
+    ↓
+Nova Micro에 질문 + 관련 문서 전달
+    ↓
+최종 답변 생성
+```
+
+Bedrock에서는 이 과정을 두 가지 방식으로 사용할 수 있다.
+
+- `Retrieve`: 관련 문서만 검색
+- `RetrieveAndGenerate`: 관련 문서를 검색하고 LLM으로 답변까지 생성
+
+`30. 문서 수집과 RAG 검색`에서 두 방식을 모두 직접 확인한다.
+
+## 1. 문서 저장용 S3 Bucket
+
+`s3.tf`에서 RAG에 사용할 문서 Bucket을 만든다.
 
 ```hcl
 resource "aws_s3_bucket" "documents" {
@@ -77,60 +109,61 @@ resource "aws_s3_bucket_public_access_block" "documents" {
 }
 ```
 
-`aws_s3_object` 리소스로 `documents/*.md` 파일을 자동 업로드한다. `terraform apply` 한 번으로 버킷 생성과 문서 업로드가 함께 끝난다.
-
-## 2. 샘플 문서 (documents/)
-
-Knowledge Base에 넣을 최소한의 문서 3개를 준비했다.
+`documents/`의 샘플 문서도 Terraform으로 함께 업로드한다.
 
 ```text
 documents/
-├── project-overview.md   # 인증 방식(JWT), DB(PostgreSQL) 언급
-├── architecture.md       # S3 / S3 Vectors / Knowledge Base 구조 언급
-└── api.md                # POST /query, citation 언급
+├── project-overview.md
+├── architecture.md
+└── api.md
 ```
 
-30단계에서 "이 프로젝트의 인증 방식은?" 같은 질의로 정확한 답변이 나오는지 확인할 예정이다.
+## 2. Bedrock IAM Role
 
-## 3. Bedrock Service IAM Role (iam.tf)
-
-로컬에서 Terraform을 실행하는 `bedrock-rag-lab` IAM User와, Bedrock 서비스가 AWS 리소스에 접근할 때 사용하는 IAM Role은 별개다.
+Bedrock이 S3, 임베딩 모델, S3 Vectors를 사용할 수 있도록 IAM Role을 만든다.
 
 ```text
-IAM User (bedrock-rag-lab)  → 사람이 Terraform 실행
-IAM Role (bedrock-rag-lab-kb-role) → Bedrock 서비스가 S3/S3 Vectors/Embedding Model 접근
+Bedrock Knowledge Base
+        ↓ IAM Role
+   ├─ S3 문서 읽기
+   ├─ Titan Embeddings 호출
+   └─ S3 Vectors 사용
 ```
 
-Trust policy는 `bedrock.amazonaws.com`을 principal로 하되, `aws:SourceAccount` / `aws:SourceArn` 조건으로 이 계정의 knowledge base 요청만 신뢰하도록 제한한다 (AWS 공식 문서 권장, confused deputy 방지).
+`iam.tf`에서 Role과 필요한 권한을 정의한다.
 
-권한 정책은 다음 4가지를 포함한다.
+이 Role은 [00. AWS 설정](../00-aws-setup/README.md)에서 만든 `bedrock-rag-lab` IAM User와는 별개다.
 
-- `bedrock:ListFoundationModels` / `bedrock:ListCustomModels`
-- `bedrock:InvokeModel` (embedding model ARN에 한정)
-- `s3:ListBucket` / `s3:GetObject` (문서 버킷에 한정)
-- `s3vectors:PutVectors` / `GetVectors` / `DeleteVectors` / `QueryVectors` / `GetIndex` (vector index ARN에 한정)
+- `bedrock-rag-lab` IAM User: 사람이 Terraform과 AWS CLI를 실행
+- Bedrock IAM Role: Bedrock 서비스가 AWS 리소스에 접근할 때 사용
 
-## 4. Embedding Model
+## 3. 임베딩 모델 설정
+
+문서를 검색 가능한 숫자 벡터로 변환하기 위해 Titan Text Embeddings V2를 사용한다.
 
 ```text
 Model ID: amazon.titan-embed-text-v2:0
 ```
 
-`variables.tf`의 `embedding_model_id`로 관리하고, `bedrock.tf`에서 `arn:aws:bedrock:<region>::foundation-model/<model-id>` 형태의 ARN으로 참조한다.
+## 4. S3 Vectors 생성
 
-## 5. S3 Vectors (s3vectors.tf)
+`s3vectors.tf`에서 벡터를 저장할 Bucket과 Index를 만든다.
 
 ```hcl
 resource "aws_s3vectors_vector_bucket" "rag" { ... }
 
 resource "aws_s3vectors_index" "rag" {
   data_type       = "float32"
-  dimension       = var.vector_dimension       # 1024 (Titan V2 기본)
-  distance_metric = var.vector_distance_metric # cosine
+  dimension       = var.vector_dimension
+  distance_metric = var.vector_distance_metric
 }
 ```
 
-## 6. Bedrock Knowledge Base (bedrock.tf)
+이번 실습에서는 Titan Text Embeddings V2의 설정에 맞춰 1024차원 벡터와 cosine 거리 방식을 사용한다.
+
+## 5. Knowledge Base 생성
+
+`bedrock.tf`에서 Knowledge Base를 생성하고 임베딩 모델과 S3 Vectors를 연결한다.
 
 ```hcl
 resource "aws_bedrockagent_knowledge_base" "rag" {
@@ -152,9 +185,9 @@ resource "aws_bedrockagent_knowledge_base" "rag" {
 }
 ```
 
-Service Role, Embedding Model, Vector Store 세 가지 의존 관계가 이 리소스 하나에 모인다.
+## 6. S3 Data Source 연결
 
-## 7. S3 Data Source 연결 (bedrock.tf)
+Knowledge Base가 어느 S3 Bucket에서 문서를 읽을지 연결한다.
 
 ```hcl
 resource "aws_bedrockagent_data_source" "documents" {
@@ -169,41 +202,13 @@ resource "aws_bedrockagent_data_source" "documents" {
 }
 ```
 
-## 8. 실행 주체(bedrock-rag-lab User) 권한 확장
+## 7. Terraform 실행
 
-`iam.tf`에서 만드는 `bedrock-rag-lab-kb-role`은 **Bedrock 서비스**가 assume해서 쓰는 Role이다. 이것과 별개로, Terraform을 실행하는 **`bedrock-rag-lab` IAM User 자신**도 이번 단계에서 IAM Role/S3 Vectors/Bedrock Knowledge Base를 생성·조회·삭제할 권한이 필요하다. `00-aws-setup`에서는 `AmazonS3FullAccess`만 부여했으므로, 이 단계에서 처음 `terraform apply`를 돌리면 권한 부족으로 막힌다.
+이 단계부터는 S3 외에도 IAM, Bedrock, S3 Vectors를 생성하므로 `bedrock-rag-lab` IAM User에 프로젝트용 추가 권한이 필요하다.
 
-실제로 겪은 첫 에러:
+프로젝트에서 사용하는 권한은 [`iam/bedrock-rag-lab-provisioning.json`](../../iam/bedrock-rag-lab-provisioning.json)에 정의되어 있다. 적용 방법은 [`iam/README.md`](../../iam/README.md)를 따른다.
 
-![s3vectors:CreateVectorBucket AccessDenied 에러](screenshots/001E_auth_error.png)
-
-이 실행 주체 권한은 20단계 전용이 아니라 프로젝트 전체에서 단계가 진행될수록 계속 자라나는 공용 아티팩트라 [iam/](../../iam/)로 분리해서 관리한다. 적용/갱신 방법, 전체 권한 목록, 왜 이렇게 세세하게 나열되어 있는지는 [iam/README.md](../../iam/README.md)를 참고한다.
-
-**이 단계에서 추가한 권한 (요약)**
-
-| 대상 | 목적 | 대표 action |
-| --- | --- | --- |
-| `bedrock-rag-lab-kb-role` | 생성/조회/삭제 + 인라인 정책 | `iam:CreateRole`, `PutRolePolicy`, `DeleteRole` 등 |
-| 위 Role의 삭제 라이프사이클 | `terraform destroy` 시 사전 점검 | `iam:ListInstanceProfilesForRole`, `ListAttachedRolePolicies` 등 |
-| Bedrock에 Role 전달 | KB 생성 시 `role_arn` 지정 | `iam:PassRole` (`iam:PassedToService = bedrock.amazonaws.com` 조건) |
-| S3 Vectors (bucket + index) | 생성/조회/삭제 + 태그 | `s3vectors:CreateVectorBucket`, `CreateIndex`, `ListTagsForResource` 등 |
-| Bedrock Knowledge Base / Data Source | 생성/조회/삭제 + 태그 | `bedrock:CreateKnowledgeBase`, `CreateDataSource`, `ListDataSources` 등 |
-
-정책 적용 후 다시 프로젝트 profile로 전환해 `terraform apply`를 재시도한다. 실제로 이 단계는 `iam:CreateRole` → `s3vectors:CreateVectorBucket` → `iam:ListRolePolicies` → `s3vectors:ListTagsForResource` → `iam:ListInstanceProfilesForRole` 순으로 5번 정도 반복하며 정책을 채웠다.
-
-Admin profile로 부여하는 절차:
-
-![Admin profile에서 정책 치환 → put-user-policy → 확인 → 프로젝트 profile 복귀 절차](screenshots/002_grant_auth.png)
-
-부여 확인(`list-user-policies` / `get-user-policy`):
-
-![list-user-policies / get-user-policy로 정책 반영 확인](screenshots/002A_grant_auth_complete.png)
-
-이 단계부터는 정책 갱신 자체를 Claude Code에게 직접 실행시켰다 (매번 명령어를 옮겨 적는 대신):
-
-![Claude Code가 PowerShell로 직접 정책을 갱신하는 과정](screenshots/002B_grant_auth_complete_with_agent.png)
-
-## 9. Terraform 실행
+권한 적용 후 Terraform을 실행한다.
 
 ```bash
 cd infra
@@ -213,19 +218,21 @@ terraform plan
 terraform apply
 ```
 
-`plan` 결과에서 생성되는 리소스 개수를 확인한다 (S3 Bucket, Public Access Block, S3 Object × 3, IAM Role, IAM Role Policy, S3 Vectors Bucket, S3 Vectors Index, Knowledge Base, Data Source).
+![Terraform plan](screenshots/000_infra_plan_with_policy.png)
 
-![terraform plan 결과 (11 to add) 및 outputs 미리보기](screenshots/000_infra_plan_with_policy.png)
+완료되면 Knowledge Base ID와 S3 Bucket 등의 Output이 표시된다.
 
-apply 완료 결과:
+![RAG 인프라 생성 완료](screenshots/003_infra_excute.png)
 
-![apply complete 및 outputs (documents_bucket_name, knowledge_base_id 등)](screenshots/003_infra_excute.png)
+## 8. 생성 확인
 
-## 10. Outputs
+Terraform Output을 확인한다.
 
 ```bash
 terraform output
 ```
+
+주요 Output:
 
 ```text
 documents_bucket_name
@@ -236,38 +243,56 @@ knowledge_base_arn
 data_source_id
 ```
 
-## 11. AWS CLI로 확인
+Knowledge Base도 AWS CLI로 확인할 수 있다.
 
 ```bash
-aws s3 ls --profile bedrock-rag-lab
-aws iam get-role --role-name bedrock-rag-lab-kb-role --profile bedrock-rag-lab
-aws bedrock-agent get-knowledge-base --knowledge-base-id <knowledge_base_id> --profile bedrock-rag-lab
-aws bedrock-agent list-data-sources --knowledge-base-id <knowledge_base_id> --profile bedrock-rag-lab
-aws s3vectors list-indexes --vector-bucket-name bedrock-rag-lab-vectors --profile bedrock-rag-lab
+aws bedrock-agent get-knowledge-base \
+  --knowledge-base-id <KNOWLEDGE_BASE_ID> \
+  --profile bedrock-rag-lab
 ```
 
-## 보안 체크
+## 완료 확인
 
-- Bedrock Service Role은 `bedrock-rag-lab` IAM User(로컬 실행 주체)와 분리되어 있다.
-- Trust policy에 `aws:SourceAccount` / `aws:SourceArn` 조건을 걸어 다른 계정/리소스의 AssumeRole을 막는다.
-- IAM 권한은 문서 버킷, embedding model, vector index 각각의 ARN으로 범위를 좁혔다 (와일드카드 없음).
-- `terraform.tfstate`에는 리소스 ARN 등이 포함되므로 계속 `.gitignore`로 제외한다.
-- `iam/bedrock-rag-lab-provisioning.json`은 계정 ID를 `<ACCOUNT_ID>` 플레이스홀더로 남겨두고, 실행 시에만 로컬에서 실제 값으로 치환한다 (Account ID를 커밋하지 않기 위함).
-- `bedrock-rag-lab` User에게 준 권한도 리소스 이름/ARN으로 범위를 좁혔다 (`iam:PassRole`은 `bedrock.amazonaws.com`으로 전달되는 경우로 제한).
-
-## 20-bedrock-rag-infra 완료 (2026-08-24)
-
-`terraform apply`로 S3 문서 버킷/오브젝트, Bedrock Service Role, S3 Vectors, Knowledge Base, Data Source까지 생성 확인했다. `bedrock-rag-lab` User 자체 권한 확장은 5차례 정도의 `AccessDenied` → 정책 추가를 거쳐 완료했다 (8번 참고).
+- S3 문서 Bucket과 샘플 문서 생성
+- Bedrock IAM Role 생성
+- S3 Vectors Bucket과 Index 생성
+- Knowledge Base 생성
+- S3 Data Source 연결
 
 ## 다음 단계
 
-Knowledge Base와 Data Source 연결까지 확인되면, 실제 ingestion과 질의는 다음 단계에서 진행한다.
+[30. 문서 수집과 RAG 검색](../30-ingestion-retrieval/README.md)에서 S3 문서를 Knowledge Base에 수집하고 실제 질문을 테스트한다.
 
-```text
-20-bedrock-rag-infra (인프라 구축)
-        ↓
-30-ingestion-retrieval
-   ├─ Ingestion Job 실행
-   ├─ Retrieve
-   └─ RetrieveAndGenerate
+---
+
+## 참고
+
+### `AccessDenied`가 발생하는 경우
+
+이 단계에서는 Terraform이 IAM Role, S3 Vectors, Knowledge Base 등 여러 리소스를 생성한다. `bedrock-rag-lab` IAM User에 필요한 권한이 없으면 `AccessDenied`가 발생한다.
+
+![S3 Vectors 권한 오류 예시](screenshots/001E_auth_error.png)
+
+먼저 현재 사용자를 확인한다.
+
+```bash
+aws sts get-caller-identity
 ```
+
+그 다음 [`iam/bedrock-rag-lab-provisioning.json`](../../iam/bedrock-rag-lab-provisioning.json)의 정책이 적용되어 있는지 확인한다.
+
+실습 과정에서는 IAM Role, S3 Vectors, Knowledge Base를 생성하는 권한이 추가로 필요했다.
+
+### Bedrock IAM Role의 권한
+
+Bedrock IAM Role에는 다음 작업에 필요한 권한만 부여한다.
+
+- S3 문서 읽기
+- Titan Text Embeddings V2 호출
+- S3 Vectors 읽기/쓰기
+
+Trust Policy에서는 `bedrock.amazonaws.com`이 이 Role을 사용할 수 있도록 설정한다.
+
+### Terraform state
+
+`terraform.tfstate`에는 생성한 AWS 리소스의 ID와 ARN 등이 저장된다. Git에 커밋하지 않는다.

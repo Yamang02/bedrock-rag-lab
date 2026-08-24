@@ -1,48 +1,32 @@
-# 10. Terraform 기본 흐름 (S3 Bucket)
+# 10. Terraform 기본 실습
 
-이 문서는 [00-aws-setup](../00-aws-setup/README.md)에서 구성한 `bedrock-rag-lab` 프로젝트 IAM User(S3 권한)를 사용해, Terraform으로 AWS 리소스를 생성/삭제하는 가장 단순한 흐름을 정리한다.
+Terraform으로 S3 Bucket을 만들고 삭제하며 기본 사용 흐름을 확인한다.
 
-첫 실습은 범위를 최대한 좁게 잡아 S3 Bucket 하나만 만들고 지운다.
+## 이번 단계에서 할 일
+
+- Terraform 설치 확인
+- AWS Provider 설정
+- S3 Bucket 정의
+- `terraform plan`으로 변경 내용 확인
+- `terraform apply`로 Bucket 생성
+- `terraform destroy`로 Bucket 삭제
 
 ## 전체 흐름
 
 ```text
-Terraform 설치 확인
-        ↓
-AWS Provider 설정
-        ↓
-현재 AWS profile 확인
-        ↓
-S3 Bucket 하나 정의
-        ↓
+Terraform 설정
+    ↓
+S3 Bucket 정의
+    ↓
 terraform init
-        ↓
-terraform fmt / validate
-        ↓
+    ↓
 terraform plan
-        ↓
+    ↓
 terraform apply
-        ↓
-AWS CLI로 생성 확인
-        ↓
+    ↓
+생성 확인
+    ↓
 terraform destroy
-```
-
-## 폴더 구조
-
-```text
-bedrock-rag-lab/
-├── docs/
-│   ├── 00-aws-setup/
-│   └── 10-terraform-basic/
-│       └── README.md
-│
-└── infra/
-    ├── versions.tf
-    ├── providers.tf
-    ├── variables.tf
-    ├── s3.tf
-    └── outputs.tf
 ```
 
 ## 1. Terraform 설치 확인
@@ -51,12 +35,13 @@ bedrock-rag-lab/
 terraform -version
 ```
 
-## 2. AWS Provider / Profile 설정
+버전 정보가 출력되면 준비가 완료된 것이다.
 
-Provider는 [00-aws-setup](../00-aws-setup/README.md)에서 만든 `bedrock-rag-lab` profile을 사용한다.
+## 2. AWS Provider 설정
+
+`providers.tf`에서 Terraform이 사용할 AWS Region과 Profile을 지정한다.
 
 ```hcl
-# providers.tf
 provider "aws" {
   region  = var.aws_region
   profile = var.aws_profile
@@ -64,7 +49,6 @@ provider "aws" {
 ```
 
 ```hcl
-# variables.tf
 variable "aws_region" {
   type    = string
   default = "ap-northeast-2"
@@ -76,7 +60,7 @@ variable "aws_profile" {
 }
 ```
 
-Terraform을 실행하기 전에 현재 CLI가 프로젝트 profile로 인증되어 있는지 확인한다.
+현재 Profile도 확인한다.
 
 ```bash
 aws sts get-caller-identity --profile bedrock-rag-lab
@@ -84,8 +68,9 @@ aws sts get-caller-identity --profile bedrock-rag-lab
 
 ## 3. S3 Bucket 정의
 
+`s3.tf`에 테스트용 Bucket을 정의한다.
+
 ```hcl
-# s3.tf
 resource "aws_s3_bucket" "documents" {
   bucket_prefix = "bedrock-rag-lab-"
 
@@ -96,81 +81,88 @@ resource "aws_s3_bucket" "documents" {
 }
 ```
 
-버킷 이름을 고정하지 않고 `bucket_prefix`를 쓰는 이유는, S3 버킷 이름이 전역으로 유일해야 하기 때문이다. 나중에 이름을 명시적으로 관리해야 할 때(예: Bedrock Knowledge Base 연동) 고정 이름으로 바꾼다.
+S3 Bucket 이름은 전 세계에서 중복될 수 없으므로 `bucket_prefix`를 사용해 고유한 이름을 자동 생성한다.
 
 ## 4. Terraform 실행
 
-절차 요약(설치 확인 → profile 확인 → init/fmt/validate/plan/apply):
-
-![Terraform 설치 확인 → profile 확인 → 실행 절차 요약](screenshots/000_terraform_init_steps.png)
-
 ```bash
 cd infra
-
 terraform init
 terraform fmt
 terraform validate
 terraform plan
+```
+
+- `init`: 필요한 Provider를 준비
+- `fmt`: Terraform 코드 형식 정리
+- `validate`: 설정 문법 확인
+- `plan`: 생성되거나 변경될 리소스 확인
+
+![Terraform 초기화 및 plan](screenshots/001_terraform_plan.png)
+
+`plan`에 문제가 없다면 실제 리소스를 생성한다.
+
+```bash
 terraform apply
 ```
 
-`terraform apply`의 `yes` 확인 프롬프트에서 plan 내용을 먼저 확인한다.
+확인 메시지가 나오면 변경 내용을 확인하고 `yes`를 입력한다.
 
-![terraform init → fmt → validate → plan 실행 결과](screenshots/001_terraform_plan.png)
+![S3 Bucket 생성 완료](screenshots/002_terraform_apply.png)
 
-## 5. AWS CLI로 생성 확인
+## 5. 생성 확인
 
 ```bash
 aws s3 ls --profile bedrock-rag-lab
 ```
 
-`outputs.tf`에 정의된 버킷 이름과 일치하는지 확인한다.
+Terraform이 만든 `bedrock-rag-lab-...` Bucket이 보이면 성공이다.
 
-```hcl
-# outputs.tf
-output "documents_bucket_name" {
-  value = aws_s3_bucket.documents.bucket
-}
-```
+## 6. 리소스 삭제
 
-![terraform apply 확인(yes) 및 버킷 생성 완료 결과](screenshots/002_terraform_apply.png)
-
-## 6. 리소스 정리
-
-실습이 끝나면 반드시 정리한다.
+이번 단계는 Terraform의 생성과 삭제 흐름을 확인하는 실습이므로 Bucket을 다시 삭제한다.
 
 ```bash
 terraform destroy
 ```
 
-![terraform destroy plan(리소스 삭제 예정 확인)](screenshots/D00_terraform_destroy.png)
+![Terraform destroy](screenshots/D00_terraform_destroy.png)
+
+삭제 후 다시 확인한다.
 
 ```bash
 aws s3 ls --profile bedrock-rag-lab
 ```
 
-버킷이 더 이상 보이지 않으면 성공이다.
+생성했던 Bucket이 더 이상 보이지 않으면 완료된 것이다.
 
-![terraform destroy 확인(yes) 및 삭제 후 aws s3 ls 결과](screenshots/D01_terraform_destroy_check.png)
+![S3 Bucket 삭제 확인](screenshots/D01_terraform_destroy_check.png)
 
-## 보안 체크
+## 완료 확인
 
-- `infra/` 아래에 Access Key, Secret Access Key를 하드코딩하지 않는다. Provider는 profile 참조만 한다.
-- `terraform.tfstate`, `.terraform/`은 Git에 커밋하지 않는다 (`.gitignore` 확인).
-- 실습 종료 후 `terraform destroy`로 비용이 발생하는 리소스를 남기지 않는다.
-
-## 10-terraform-basic 완료
-
-`terraform init → plan → apply → aws s3 ls 확인 → terraform destroy`까지 확인했다. S3 버킷은 생성 후 삭제되어 현재 남아있는 과금 리소스는 없다.
+- Terraform Provider가 정상적으로 초기화됨
+- `terraform plan`으로 변경 내용을 확인함
+- S3 Bucket 생성 확인
+- `terraform destroy`로 S3 Bucket 삭제 확인
 
 ## 다음 단계
 
-S3 Bucket 생성/삭제까지 확인되면, 이후 단계를 폭을 넓혀가며 진행한다.
+[20. Bedrock RAG 인프라](../20-bedrock-rag-infra/README.md)에서 실제 RAG 서비스에 필요한 AWS 리소스를 구성한다.
 
-```text
-10-terraform-basic (S3 Bucket)
-        ↓
-20-bedrock-rag-infra (S3 Document Bucket + IAM Role + S3 Vectors + Knowledge Base)
-        ↓
-30-ingestion-retrieval (Ingestion + Retrieve/RetrieveAndGenerate)
-```
+---
+
+## 참고
+
+### Terraform state 파일
+
+Terraform은 생성한 리소스의 상태를 `terraform.tfstate`에 저장한다.
+
+- `terraform.tfstate`, `*.tfstate.*`는 Git에 커밋하지 않는다.
+- `.terraform/`도 Git에 커밋하지 않는다.
+- 이 프로젝트에서는 `.gitignore`로 제외한다.
+
+### `terraform plan`과 `apply`
+
+- `plan`은 앞으로 적용될 변경 내용을 미리 보여준다.
+- `apply`는 그 변경을 AWS에 실제로 적용한다.
+- 예상하지 않은 삭제나 교체가 보이면 `apply`하기 전에 Terraform 코드를 확인한다.
