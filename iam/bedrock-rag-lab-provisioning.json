@@ -64,7 +64,7 @@
     {
       "Sid": "BedrockListAccountWide",
       "Effect": "Allow",
-      "Action": ["bedrock:ListKnowledgeBases", "bedrock:ListFoundationModels", "bedrock:ListInferenceProfiles"],
+      "Action": ["bedrock:ListKnowledgeBases", "bedrock:ListFoundationModels", "bedrock:ListInferenceProfiles", "bedrock:GetInferenceProfile"],
       "Resource": "*"
     },
     {
@@ -80,7 +80,10 @@
       "Sid": "BedrockInvokeGenerationModel",
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel"],
-      "Resource": "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
+      "Resource": [
+        "arn:aws:bedrock:ap-northeast-2:<ACCOUNT_ID>:inference-profile/apac.amazon.nova-micro-v1:0",
+        "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0"
+      ]
     },
     {
       "Sid": "LambdaManage",
