@@ -2,7 +2,7 @@
 
 이 문서는 Bedrock RAG 실습을 시작하기 전에 AWS CLI 인증과 실습용 IAM 사용자를 구성하는 과정을 정리한다.
 
-> 이 실습에서는 IAM과 AWS CLI의 인증/인가 흐름을 직접 확인하기 위해 실습용 IAM User를 사용한다. 다만 Access Key와 같은 장기 자격 증명은 꼭 필요한 시점까지 발급을 미루고, 가능하면 최대한 만들지 않는 방향으로 진행한다. 실제 운영 환경에서는 IAM Identity Center, IAM Role, OIDC 등 임시 자격 증명 방식을 우선 고려한다.
+> 이 실습에서는 IAM과 AWS CLI의 인증/인가 흐름을 직접 확인하기 위해 로컬은 실습용 IAM User + Access Key를, CI/CD(GitHub Actions)는 OIDC + IAM Role을 사용한다. 실제 운영 환경에서는 장기 Access Key 대신 IAM Identity Center 등 임시 자격 증명 방식을 우선 고려한다.
 
 ## 전체 흐름
 
@@ -68,52 +68,46 @@ aws iam get-user \
   --user-name bedrock-rag-lab
 ```
 
-## 3. Access Key를 바로 만들지 않는 이유
+## 3. 로컬 인증 방식 결정: IAM User + Access Key
 
-앞서 Admin 인증에는 `aws login`(브라우저 기반 로그인)을 사용했다. 이 실습에서 굳이 실습용 IAM User에 장기 Access Key를 발급하는 것이 최선인지는 다시 볼 필요가 있다.
+앞서 Admin 인증에는 `aws login`(브라우저 기반 로그인)을 사용했다. 이 실습에서 굳이 실습용 IAM User에 장기 Access Key를 발급하는 것이 최선인지 검토한 결과, **로컬 실습용은 전통적인 IAM User + Access Key 방식을, CI/CD는 OIDC 방식을 사용**하기로 결정했다.
 
 ```text
 Admin
-  ↓ aws login
-프로젝트 IAM 구성
-  ↓
-로컬 인증 (방식 검토 중)
-  ↓
-Terraform
+  ↓ aws login (임시 자격 증명)
+프로젝트 IAM User
+  ↓ Access Key (장기 자격 증명)
+로컬 Terraform 실습
 
-GitHub
-  ↓ OIDC
+GitHub Actions
+  ↓ OIDC (임시 자격 증명)
 IAM Role
   ↓
 Terraform
 ```
 
-두 흐름 모두 **장기 credential을 최대한 만들지 않는 방향**이 더 현대적인 AWS 사용법이다. 로컬 실습용 IAM User의 인증 방식(Access Key 발급 여부, IAM Identity Center 연동 등)은 별도 단계에서 결정하고 이 문서를 갱신한다.
+로컬 실습 목적상 IAM User + Access Key가 개념을 직접 확인하기 가장 쉬운 방식이라 이번 실습에서는 이 방식을 택한다. 대신 권한은 필요한 만큼만(S3부터 단계적으로) 부여하고, 실습이 끝나면 Access Key를 폐기한다. CI/CD(GitHub Actions)는 처음부터 장기 credential 없이 OIDC + IAM Role로 간다.
 
-지금 단계에서는 다음까지만 진행한다.
+## 4. 권한 정책 연결 (S3부터 단계적으로)
+
+한 번에 넓은 권한(Bedrock 포함)을 주지 않고, 첫 Terraform 실습에 필요한 S3 권한만 우선 부여한다. 이후 IAM Role, Bedrock 등이 필요해질 때마다 그 시점에 권한을 추가한다.
 
 ```bash
-aws sts get-caller-identity
-aws iam create-user --user-name bedrock-rag-lab
-aws iam get-user --user-name bedrock-rag-lab
+aws iam attach-user-policy --user-name bedrock-rag-lab --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 ```
 
-## 4. 권한 정책 연결
-
-초기 실습에서는 필요한 AWS 리소스를 Terraform으로 생성할 수 있도록 권한을 부여한다.
-
-강의에서는 편의를 위해 넓은 권한으로 시작할 수 있지만, 이후 IAM 정책을 최소 권한으로 줄이는 과정을 별도 학습 포인트로 다룬다.
-
-현재 연결된 정책은 다음 명령으로 확인할 수 있다.
+확인:
 
 ```bash
 aws iam list-attached-user-policies \
   --user-name bedrock-rag-lab
 ```
 
-## 5. (보류) CLI용 Access Key 생성 — 참고용
+```text
+IAM User (bedrock-rag-lab) + IAM Policy (AmazonS3FullAccess) = S3 작업 가능
+```
 
-> 위 3번에서 정리했듯, 이 단계는 로컬 인증 방식을 최종 결정하기 전까지 보류한다. 전통적인 IAM User + Access Key 방식을 선택할 경우에 한해 아래 명령을 사용한다.
+## 5. CLI용 Access Key 생성
 
 ```bash
 aws iam create-access-key \
@@ -156,9 +150,25 @@ arn:aws:iam::<ACCOUNT_ID>:user/bedrock-rag-lab
 
 로컬 실습에서는 다음처럼 profile을 명시할 수 있다.
 
+macOS/Linux (bash):
+
 ```bash
 export AWS_PROFILE=bedrock-rag-lab
 ```
+
+Windows CMD:
+
+```cmd
+set AWS_PROFILE=bedrock-rag-lab
+```
+
+Windows PowerShell:
+
+```powershell
+$env:AWS_PROFILE="bedrock-rag-lab"
+```
+
+> CMD의 `set`, PowerShell의 `$env:`는 해당 터미널 창에만 적용되고 창을 닫으면 사라진다.
 
 이후 Terraform과 AWS CLI 명령은 해당 profile의 자격 증명을 사용한다.
 
@@ -200,6 +210,10 @@ GitHub Actions 단계에서는 장기 AWS Access Key를 GitHub Secrets에 저장
 - `.env`, `*.tfvars`, Terraform state 파일에 비밀값이 들어갈 수 있는지 확인한다.
 - 실습 종료 후 불필요한 Access Key와 IAM User를 삭제한다.
 - 운영 환경에서는 IAM Identity Center, IAM Role, OIDC 등 임시 자격 증명을 우선 사용한다.
+
+## 00-aws-setup 완료
+
+여기까지 진행하면 Admin이 아니라 `bedrock-rag-lab` 프로젝트 IAM User(S3 권한)로 CLI 작업이 전환된 상태다.
 
 ## 다음 단계
 
