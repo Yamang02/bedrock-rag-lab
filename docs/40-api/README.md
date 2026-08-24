@@ -89,7 +89,7 @@ Lambda 런타임(Python 3.13)에는 boto3가 기본 포함되어 있어 별도 �
 ## 2. Lambda 실행 Role + 함수 (`infra/lambda.tf`)
 
 - **Trust policy**: `lambda.amazonaws.com`만 assume 가능.
-- **권한**: `AWSLambdaBasicExecutionRole`(CloudWatch Logs, AWS 관리형) + `bedrock:RetrieveAndGenerate`/`bedrock:Retrieve`(이 Knowledge Base ARN 한정) + `bedrock:InvokeModel`(생성 모델 ARN 한정). `RetrieveAndGenerate`가 내부적으로 `Retrieve`도 요구한다는 건 처음엔 몰랐다 — 첫 curl 테스트가 `RetrieveAndGenerate`를 호출하는 Lambda 안에서 "not authorized to perform: bedrock:Retrieve"로 실패해서 CloudWatch Logs로 확인한 뒤 추가했다.
+- **권한**: `AWSLambdaBasicExecutionRole`(CloudWatch Logs, AWS 관리형) + `bedrock:RetrieveAndGenerate`/`bedrock:Retrieve`(이 Knowledge Base ARN 한정) + `bedrock:InvokeModel`(생성 모델 inference profile ARN + 기반 foundation model ARN 패턴) + `bedrock:GetInferenceProfile`(생성 모델이 cross-region inference profile이라 별도로 필요). `RetrieveAndGenerate`가 내부적으로 `Retrieve`도 요구한다는 건 처음엔 몰랐다 — 첫 curl 테스트가 Lambda 안에서 "not authorized to perform: bedrock:Retrieve"로 실패해서 CloudWatch Logs로 확인한 뒤 추가했다. 생성 모델을 Nova Micro(inference profile)로 바꾼 뒤에는 `GetInferenceProfile` 누락으로 또 한 번 막혔다 — 자세한 경위는 부록 참고.
 - **패키징**: `data "archive_file"`로 `handler.py`를 zip으로 묶고 `source_code_hash`로 변경을 감지한다.
 - **환경변수**: `KNOWLEDGE_BASE_ID`, `MODEL_ARN`을 Terraform 리소스 참조로 주입 (하드코딩 없음).
 
@@ -158,17 +158,33 @@ curl.exe -X POST $endpoint `
   -d '{"question": "이 프로젝트의 인증 방식은?"}'
 ```
 
-예상 응답:
+실제 응답 (Nova Micro 전환 후 성공):
 
 ```json
-{"answer": "JWT 기반 인증을 사용합니다."}
+{"answer": "이 프로젝트는 AWS Bedrock 기반 RAG(Retrieval-Augmented Generation) 서비스를 제공합니다. 인증은 JWT 기반 인증을 사용하며, 데이터베이스로는 PostgreSQL을 사용합니다. ..."}
 ```
+
+전체 응답은 [curl-result.json](curl-result.json) 참고. 문서 3개(인증, 아키텍처, API) 내용을 종합한 답변이 나왔다.
 
 Windows에서 한글이 깨지면 30단계에서 겪었던 것과 같은 콘솔 인코딩 문제일 수 있다 — `chcp 65001` 후 재시도하거나, 응답을 파일로 리다이렉트해서 에디터로 확인한다.
 
-## 부록: Anthropic 모델 "Model use case details" 에러
+**좁게 물어봤을 때는 어떨까** — "다른 정보는 필요 없고 인증 방식만 한 문장으로" 요청해봤다.
 
-첫 curl 테스트에서 Lambda 로그에 `bedrock:Retrieve` 권한 누락 에러가 나와 `infra/lambda.tf`에 추가했는데(2번 참고), 그 다음엔 전혀 다른 에러가 나왔다.
+```powershell
+curl.exe -X POST $endpoint `
+  -H "Content-Type: application/json" `
+  -d '{"question": "이 프로젝트의 인증 방식만 한 문장으로 알려줘. 다른 정보는 필요 없어."}'
+```
+
+결과는 [curl-result-narrow-question.json](curl-result-narrow-question.json) — 지시를 따르지 않고 7개 항목 전체를 **영어로** 나열했다. Claude 계열에 비해 Nova Micro의 instruction-following이 약하다는 걸 보여주는 실제 사례다. 이 실습은 파이프라인 동작 확인이 목표라 프롬프트 튜닝은 범위 밖으로 남겨둔다.
+
+## 부록: 생성 모델 전환기 (Claude 3 Haiku → Nova Micro)
+
+30단계에서 검증했던 Claude 3 Haiku를 그대로 썼는데, 40단계에서 처음 curl 테스트를 하니 연달아 새로운 에러가 나왔다. 시간순으로 정리한다.
+
+**1) `bedrock:Retrieve` 권한 누락** — `infra/lambda.tf`에 추가해서 해결 (2번 참고).
+
+**2) Anthropic 모델 "Model use case details" 미제출**
 
 ```text
 ValidationException: Model use case details have not been submitted for this account.
@@ -176,24 +192,70 @@ Fill out the Anthropic use case details form before using the model.
 If you have already filled out the form, try again in 15 minutes.
 ```
 
-**중요: IAM/Terraform 문제가 아니다.** 같은 계정의 `bedrock-rag-lab` User로 CLI에서 raw `retrieve-and-generate`와 `bedrock-runtime converse`를 직접 호출해도 동일하게 막혀서, Lambda나 코드 쪽 문제가 아니라 **계정 단위로 Anthropic 모델에 걸려있는 게이트**임을 확인했다. 30단계에서는 같은 모델(Claude 3 Haiku)로 성공했었는데, 이 시점에는 막혀 있었다 — 정확한 재현 조건은 알 수 없다.
+같은 계정의 `bedrock-rag-lab` User로 CLI에서 raw `retrieve-and-generate`, `bedrock-runtime converse`를 직접 호출해도 동일하게 막혀서 **계정 단위로 Anthropic 모델에 걸려있는 게이트**임을 확인했다 (Lambda나 코드 문제가 아니다). 30단계에서는 같은 모델로 성공했었는데 이 시점엔 막혀 있었다 — 정확한 재현 조건은 알 수 없다. Bedrock 콘솔 → Model catalog에서 use case 양식을 다시 제출했다.
 
-- 예전 "Model access" 페이지는 폐지됐고, AWS 서버리스 foundation model은 첫 호출 시 계정 단위로 자동 활성화되는 방식으로 바뀌었다. **다만 Anthropic 모델은 예외적으로 use case 양식 제출이 필요**하다 (AWS Marketplace로 제공되는 모델도 별도로 "Marketplace 권한 있는 사용자가 한 번 invoke"해야 하는 등 각자 다른 규칙이 있다). Amazon 자체 모델(Titan, Nova 등)은 이 게이트가 없다.
-- 확인 경로: Bedrock 콘솔 → Model catalog → 해당 모델 페이지. 이번 실습에서는 여기서 특별히 이상한 표시는 못 봤고, use case 양식을 다시 제출한 뒤 AWS 안내대로 15분 정도 기다려야 했다 (제출 직후 바로 재시도하면 여전히 막힌다).
-- 스크린샷: [003E_anthropic_model_grant.png](screenshots/003E_anthropic_model_grant.png), [003E_anthropic_model_usecase_form.png](screenshots/003E_anthropic_model_usecase_form.png)
+![Anthropic 모델 use case 제출 화면](screenshots/003E_anthropic_model_grant.png)
+![use case 양식 상세](screenshots/003E_anthropic_model_usecase_form.png)
 
-**시사점**: 앞으로 이 프로젝트에서 Anthropic 계열 모델을 처음 쓸 때(리전을 바꾸거나 다른 Claude 모델로 바꿀 때 포함)마다 이 게이트를 다시 만날 수 있다. Amazon 자체 모델로 바꾸면 이 문제 자체가 없어진다.
+**3) AWS Marketplace 구독 권한 필요**
+
+15분 뒤 재시도하니 다른 에러로 바뀌었다.
+
+```text
+ValidationException: Model access is denied due to IAM user or service role is not authorized to
+perform the required AWS Marketplace actions (aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe)
+to enable access to this model.
+```
+
+Anthropic 모델은 AWS Marketplace를 통해 제공되어서, 이 action들을 가진 주체가 한 번 호출해야 계정 전체에 활성화된다. **여기서 방향을 바꿨다** — Marketplace 구독을 계속 진행하는 대신, **AWS 자체 모델(Marketplace 게이트가 없는)로 교체**하기로 했다.
+
+**4) Claude 3 Haiku → Amazon Nova Micro로 교체**
+
+`ap-northeast-2`에서 Nova 계열은 in-region on-demand가 아니라 cross-region inference profile을 거쳐야 한다(30단계에서 이미 확인한 제약). 실제 API로 조회해서 정확한 profile ID와 ARN을 확인했다.
+
+```bash
+aws bedrock list-inference-profiles --region ap-northeast-2 \
+  --query "inferenceProfileSummaries[?contains(inferenceProfileId, 'nova')].[inferenceProfileId,inferenceProfileName,status]"
+```
+
+```text
+apac.amazon.nova-micro-v1:0  →  ACTIVE (가장 저렴, APAC 라우팅)
+```
+
+```bash
+aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0
+```
+
+으로 실제 라우팅 대상 리전(ap-southeast-2, ap-northeast-1, ap-south-1, ap-northeast-2, ap-southeast-1, ap-northeast-3)과 각 리전의 foundation model ARN을 확인했다. `bedrock:InvokeModel` 권한은 두 가지를 모두 포함해야 한다 (AWS cross-region inference 문서에 명시된 요구사항).
+
+- inference profile ARN 자체: `arn:aws:bedrock:ap-northeast-2:<ACCOUNT_ID>:inference-profile/apac.amazon.nova-micro-v1:0`
+- 라우팅 대상 리전들의 foundation model (리전 wildcard로 묶음): `arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0`
+
+변경 사항: `infra/variables.tf`(`generation_model_id`, `generation_base_model_id` 추가), `infra/bedrock.tf`(inference profile ARN 구성으로 local 변경), `infra/iam.tf`, `infra/lambda.tf`, `iam/bedrock-rag-lab-provisioning.json`(Anthropic ARN → Nova Micro ARN 교체, `MarketplaceModelSubscribe` statement 삭제).
+
+**5) `bedrock:GetInferenceProfile` 권한 — 두 군데 다 필요했다**
+
+inference profile을 쓰려면 `GetInferenceProfile`도 필요한데, 처음엔 **KB Service Role**(`bedrock-rag-lab-kb-role`, `infra/iam.tf`)에만 추가했다.
+
+```text
+AccessDeniedException: Not authorized to call GetInferenceProfile for arn:...inference-profile/apac.amazon.nova-micro-v1:0
+```
+
+apply해도 계속 막혀서 실제 정책 내용을 `aws iam get-role-policy`로 직접 대조해봤다. Service Role엔 정상 반영돼 있었다 — 그런데도 막힌 이유는, `retrieve_and_generate`를 호출하는 진짜 caller가 **Lambda 자신의 실행 Role**(`bedrock-rag-lab-lambda-query-role`)이었기 때문이다. KB Service Role은 검색/임베딩 단계에서만 쓰이고, 생성 모델 호출 권한 확인은 호출자(Lambda Role) 기준으로 이뤄진다. `infra/lambda.tf`에 같은 권한을 추가하고 나서야 성공했다.
+
+**교훈**: `RetrieveAndGenerate`처럼 여러 리소스에 걸친 API는 "어느 권한이 어느 Role에 필요한지"가 직관과 다를 수 있다 — 에러 메시지의 ARN을 보고 실제 Role의 정책 내용을 직접 대조하는 게 제일 빠르다.
 
 ## 보안 체크
 
-- Lambda 실행 Role은 `bedrock:RetrieveAndGenerate`/`Retrieve`/`InvokeModel`을 이 Knowledge Base/생성 모델 ARN으로만 한정했다 (와일드카드 없음).
+- Lambda 실행 Role은 `bedrock:RetrieveAndGenerate`/`Retrieve`/`InvokeModel`/`GetInferenceProfile`을 이 Knowledge Base/생성 모델 ARN으로만 한정했다 (와일드카드 없음. 단 `InvokeModel`의 기반 모델 리소스는 inference profile 특성상 리전 wildcard를 쓴다).
 - API Gateway → Lambda 호출 권한(`aws_lambda_permission`)은 이 API의 `execution_arn`으로 범위를 좁혔다.
 - `bedrock-rag-lab` User의 `apigateway:*`는 의도적으로 넓게 잡은 예외다 — 위 4번 참고.
 - API에 인증/인가가 없다 (누구나 호출 가능). 이 실습에서는 의도적으로 생략했고, 운영이라면 API Key, IAM 인증, Cognito Authorizer 등을 붙여야 한다.
+- AWS Marketplace 구독이 필요 없는 모델(Amazon 자체 모델)을 선택해서, 계정에 별도 구독 상태를 남기지 않았다.
 
-## 40-api 진행 상태 (2026-08-24)
+## 40-api 완료 (2026-08-24)
 
-Terraform apply는 완료됐다 (Lambda, API Gateway, IAM 모두 정상 생성/배포). `curl` 요청도 API Gateway → Lambda까지는 정상 도달하는 것을 로그로 확인했다. 다만 위 부록의 Anthropic use case 게이트 때문에 실제 답변 생성까지는 아직 end-to-end로 확인하지 못했다 — use case 재제출 후 전파 대기 중이다. 전파 완료되는 대로 `curl` 재테스트하고 이 섹션을 갱신한다.
+`curl` → API Gateway → Lambda → RetrieveAndGenerate(Nova Micro) → 응답까지 end-to-end로 확인했다. Anthropic 모델의 use case/Marketplace 게이트를 피하기 위해 생성 모델을 Nova Micro로 교체했고, 그 과정에서 cross-region inference profile 관련 권한(KB Service Role과 Lambda Role 양쪽 모두)을 추가로 배웠다 (부록 참고).
 
 ## 다음 단계
 
