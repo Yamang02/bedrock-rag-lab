@@ -110,7 +110,7 @@ aws_lambda_permission으로 API Gateway가 이 Lambda를 호출할 수 있도록
 
 ## 4. 실행 주체(bedrock-rag-lab User) 권한 확장
 
-Lambda/API Gateway를 만드는 것도 `bedrock-rag-lab` User 자신의 권한이 필요하다. 이번엔 접근을 조금 바꿨다 — 이 프로젝트는 짧게 쓰고 버릴 실습이고 CI/CD(50단계)도 하지 않기로 해서, Role마다 개별 statement를 추가하는 대신 **`role/bedrock-rag-lab-*` 명명 규칙 기준 와일드카드**로 단순화했다 (`ProjectRoleManage`).
+Lambda/API Gateway를 만드는 것도 `bedrock-rag-lab` User 자신의 권한이 필요하다. 이번엔 접근을 조금 바꿨다 — 이 프로젝트는 짧게 쓰고 버릴 실습이고 CI/CD(GitHub Actions)도 이번 범위에서 제외하기로 해서, Role마다 개별 statement를 추가하는 대신 **`role/bedrock-rag-lab-*` 명명 규칙 기준 와일드카드**로 단순화했다 (`ProjectRoleManage`).
 
 추가된 권한 요약:
 
@@ -264,7 +264,7 @@ CI/CD(GitHub Actions + OIDC)는 이번 실습 범위에서 제외했다. 바로 
 ```text
 40-api (HTTP API 동작 확인)
         ↓
-60-cost-cleanup
+50-cost-cleanup
    ├─ 비용 확인
    └─ terraform destroy
 ```
