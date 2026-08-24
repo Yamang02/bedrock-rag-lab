@@ -158,11 +158,7 @@ S3 Bucket 생성/삭제까지 확인되면, 이후 단계를 폭을 넓혀가며
 ```text
 10-terraform-basic (S3 Bucket)
         ↓
-02-s3-documents (문서 업로드)
+20-bedrock-rag-infra (S3 Document Bucket + IAM Role + S3 Vectors + Knowledge Base)
         ↓
-03-iam-role (Bedrock 접근용 Role)
-        ↓
-04-bedrock-knowledge-base
-        ↓
-05-rag-query
+30-ingestion-retrieval (Ingestion + Retrieve/RetrieveAndGenerate)
 ```
