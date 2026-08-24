@@ -173,6 +173,10 @@ resource "aws_bedrockagent_data_source" "documents" {
 
 `iam.tf`에서 만드는 `bedrock-rag-lab-kb-role`은 **Bedrock 서비스**가 assume해서 쓰는 Role이다. 이것과 별개로, Terraform을 실행하는 **`bedrock-rag-lab` IAM User 자신**도 이번 단계에서 IAM Role/S3 Vectors/Bedrock Knowledge Base를 생성·조회·삭제할 권한이 필요하다. `00-aws-setup`에서는 `AmazonS3FullAccess`만 부여했으므로, 이 단계에서 처음 `terraform apply`를 돌리면 권한 부족으로 막힌다.
 
+실제로 겪은 첫 에러:
+
+![s3vectors:CreateVectorBucket AccessDenied 에러](screenshots/001E_auth_error.png)
+
 이 실행 주체 권한은 20단계 전용이 아니라 프로젝트 전체에서 단계가 진행될수록 계속 자라나는 공용 아티팩트라 [iam/](../../iam/)로 분리해서 관리한다. 적용/갱신 방법, 전체 권한 목록, 왜 이렇게 세세하게 나열되어 있는지는 [iam/README.md](../../iam/README.md)를 참고한다.
 
 **이 단계에서 추가한 권한 (요약)**
@@ -187,6 +191,18 @@ resource "aws_bedrockagent_data_source" "documents" {
 
 정책 적용 후 다시 프로젝트 profile로 전환해 `terraform apply`를 재시도한다. 실제로 이 단계는 `iam:CreateRole` → `s3vectors:CreateVectorBucket` → `iam:ListRolePolicies` → `s3vectors:ListTagsForResource` → `iam:ListInstanceProfilesForRole` 순으로 5번 정도 반복하며 정책을 채웠다.
 
+Admin profile로 부여하는 절차:
+
+![Admin profile에서 정책 치환 → put-user-policy → 확인 → 프로젝트 profile 복귀 절차](screenshots/002_grant_auth.png)
+
+부여 확인(`list-user-policies` / `get-user-policy`):
+
+![list-user-policies / get-user-policy로 정책 반영 확인](screenshots/002A_grant_auth_complete.png)
+
+이 단계부터는 정책 갱신 자체를 Claude Code에게 직접 실행시켰다 (매번 명령어를 옮겨 적는 대신):
+
+![Claude Code가 PowerShell로 직접 정책을 갱신하는 과정](screenshots/002B_grant_auth_complete_with_agent.png)
+
 ## 9. Terraform 실행
 
 ```bash
@@ -198,6 +214,12 @@ terraform apply
 ```
 
 `plan` 결과에서 생성되는 리소스 개수를 확인한다 (S3 Bucket, Public Access Block, S3 Object × 3, IAM Role, IAM Role Policy, S3 Vectors Bucket, S3 Vectors Index, Knowledge Base, Data Source).
+
+![terraform plan 결과 (11 to add) 및 outputs 미리보기](screenshots/000_infra_plan_with_policy.png)
+
+apply 완료 결과:
+
+![apply complete 및 outputs (documents_bucket_name, knowledge_base_id 등)](screenshots/003_infra_excute.png)
 
 ## 10. Outputs
 

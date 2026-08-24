@@ -45,6 +45,10 @@ ARN: arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-haiku-2
 
 `infra/variables.tf`의 `generation_model_id`로 관리한다.
 
+이 결정을 내리게 된 논의 과정:
+
+![Claude 외 저렴한 모델 검토 및 30단계 폴더 생성 논의](screenshots/000_model_selection.png)
+
 ### 1-2. Service Role에 생성 모델 InvokeModel 권한 추가
 
 RetrieveAndGenerate 시 Bedrock이 내부적으로 생성 모델을 호출하는 것도 `bedrock-rag-lab-kb-role`(Bedrock Service Role, `infra/iam.tf`)의 권한으로 이뤄진다. 기존에는 embedding model ARN만 허용했는데, 여기에 생성 모델 ARN을 추가했다.
@@ -63,6 +67,8 @@ terraform apply
 ```
 
 `aws_iam_role_policy.bedrock_kb`가 `Modifying...` → `Modifications complete`로 나오면 Service Role에 반영된 것이다 (리소스 추가/삭제 없이 policy 내용만 바뀐다).
+
+![terraform apply로 Service Role 정책 수정 완료](screenshots/001_apply_model_policy.png)
 
 ---
 
@@ -110,6 +116,8 @@ $jobId = aws bedrock-agent start-ingestion-job `
 Write-Output "Ingestion Job ID: $jobId"
 ```
 
+![ingestion job 실행 명령과 상태 확인 명령 안내](screenshots/002_Ingestion_job_plan.png)
+
 ### 3-2. Ingestion 완료 상태 확인
 
 ```powershell
@@ -119,6 +127,12 @@ aws bedrock-agent get-ingestion-job `
 ```
 
 `status`가 `STARTING` → `IN_PROGRESS` → `COMPLETE`로 바뀌는지 확인한다. `statistics`에서 `numberOfDocumentsScanned: 3`, `numberOfNewDocumentsIndexed: 3` 정도가 나오면 정상이다.
+
+![get-ingestion-job 결과 (status: COMPLETE, 문서 3개 인덱싱)](screenshots/003_excute_Ingestion.png)
+
+ingestion job이 곧 임베딩 작업이라는 것과 다음 단계(Retrieve) 설명:
+
+![ingestion = 임베딩 작업이라는 설명 및 Retrieve 테스트 안내](screenshots/003A_explan_job.png)
 
 ### 3-3. Retrieve 테스트
 

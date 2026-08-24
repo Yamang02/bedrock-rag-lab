@@ -54,6 +54,8 @@ arn:aws:iam::<ACCOUNT_ID>:user/admin
 
 > `<ACCOUNT_ID>`는 비밀값은 아니지만 public GitHub에 굳이 노출할 정보는 아니다. 강의 자료로 스크린샷을 올릴 때는 Account ID 부분을 가린다.
 
+![aws login 실행 및 Admin profile 갱신](screenshots/000_aws_admin_login.png)
+
 ## 2. 실습용 IAM User 생성
 
 ```bash
@@ -67,6 +69,8 @@ aws iam create-user \
 aws iam get-user \
   --user-name bedrock-rag-lab
 ```
+
+![get-caller-identity(admin) → create-user → get-user 실행 결과](screenshots/001_aws_create_user.png)
 
 ## 3. 로컬 인증 방식 결정: IAM User + Access Key
 
@@ -92,6 +96,10 @@ Terraform
 
 한 번에 넓은 권한(Bedrock 포함)을 주지 않고, 첫 Terraform 실습에 필요한 S3 권한만 우선 부여한다. 이후 IAM Role, Bedrock 등이 필요해질 때마다 그 시점에 권한을 추가한다.
 
+아래 4~7번의 전체 절차 요약:
+
+![S3 권한 부여 → Access Key 생성 → profile 등록 → 인증 확인 절차 요약](screenshots/002_s3_authorization_step.png)
+
 ```bash
 aws iam attach-user-policy --user-name bedrock-rag-lab --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 ```
@@ -107,6 +115,8 @@ aws iam list-attached-user-policies \
 IAM User (bedrock-rag-lab) + IAM Policy (AmazonS3FullAccess) = S3 작업 가능
 ```
 
+![attach-user-policy → list-attached-user-policies 실행 결과](screenshots/003A_s3_authorization.png)
+
 ## 5. CLI용 Access Key 생성
 
 ```bash
@@ -115,6 +125,8 @@ aws iam create-access-key \
 ```
 
 > `AccessKeyId`와 `SecretAccessKey`는 GitHub, README, Terraform 코드, 스크린샷에 절대 포함하지 않는다. 특히 Secret Access Key는 생성 시점에만 확인할 수 있다.
+
+![create-access-key 실행 결과 (AccessKeyId/SecretAccessKey는 가림)](screenshots/003B_s3_authorization.png)
 
 ## 6. 별도 AWS CLI Profile 구성
 
@@ -146,6 +158,8 @@ aws sts get-caller-identity \
 arn:aws:iam::<ACCOUNT_ID>:user/bedrock-rag-lab
 ```
 
+![aws configure --profile → sts get-caller-identity --profile 실행 결과](screenshots/003C_s3_authorization.png)
+
 ## 8. 이후 Terraform에서 사용
 
 로컬 실습에서는 다음처럼 profile을 명시할 수 있다.
@@ -169,6 +183,8 @@ $env:AWS_PROFILE="bedrock-rag-lab"
 ```
 
 > CMD의 `set`, PowerShell의 `$env:`는 해당 터미널 창에만 적용되고 창을 닫으면 사라진다.
+
+![PowerShell에서 $env:AWS_PROFILE 설정 후 프로젝트 User로 전환 확인](screenshots/002A_s3_authorization(windows).png)
 
 이후 Terraform과 AWS CLI 명령은 해당 profile의 자격 증명을 사용한다.
 

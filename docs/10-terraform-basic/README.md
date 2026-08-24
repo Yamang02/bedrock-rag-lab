@@ -100,6 +100,10 @@ resource "aws_s3_bucket" "documents" {
 
 ## 4. Terraform 실행
 
+절차 요약(설치 확인 → profile 확인 → init/fmt/validate/plan/apply):
+
+![Terraform 설치 확인 → profile 확인 → 실행 절차 요약](screenshots/000_terraform_init_steps.png)
+
 ```bash
 cd infra
 
@@ -111,6 +115,8 @@ terraform apply
 ```
 
 `terraform apply`의 `yes` 확인 프롬프트에서 plan 내용을 먼저 확인한다.
+
+![terraform init → fmt → validate → plan 실행 결과](screenshots/001_terraform_plan.png)
 
 ## 5. AWS CLI로 생성 확인
 
@@ -127,6 +133,8 @@ output "documents_bucket_name" {
 }
 ```
 
+![terraform apply 확인(yes) 및 버킷 생성 완료 결과](screenshots/002_terraform_apply.png)
+
 ## 6. 리소스 정리
 
 실습이 끝나면 반드시 정리한다.
@@ -135,11 +143,15 @@ output "documents_bucket_name" {
 terraform destroy
 ```
 
+![terraform destroy plan(리소스 삭제 예정 확인)](screenshots/D00_terraform_destroy.png)
+
 ```bash
 aws s3 ls --profile bedrock-rag-lab
 ```
 
 버킷이 더 이상 보이지 않으면 성공이다.
+
+![terraform destroy 확인(yes) 및 삭제 후 aws s3 ls 결과](screenshots/D01_terraform_destroy_check.png)
 
 ## 보안 체크
 

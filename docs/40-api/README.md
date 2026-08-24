@@ -119,13 +119,19 @@ Lambda/API Gateway를 만드는 것도 `bedrock-rag-lab` User 자신의 권한�
 | IAM Role 관리 범위 확장 | `bedrock-rag-lab-kb-role` 하나만 → `bedrock-rag-lab-*` 전체 (Lambda Role 포함) |
 | `iam:PassRole` to `lambda.amazonaws.com` | Lambda 생성 시 실행 Role을 넘겨주기 위해 |
 | `lambda:*` 관리 action | 함수 ARN(`function:bedrock-rag-lab-*`)에 한정 |
-| `apigateway:*` | HTTP API 리소스 경로(`/apis*`)에 한정하되, action은 넓게 허용 |
+| `apigateway:*` | 리전 전체(`arn:aws:apigateway:ap-northeast-2::*`) |
 
-`apigateway:*`는 다른 statement들보다 의도적으로 넓다 — API Gateway v2의 세분화된 하위 리소스 ARN 패턴(라우트/통합/스테이지마다 다름)을 하나씩 맞추기보다 편의 우선으로 갔고, 나중에 좁히는 걸 학습 포인트로 남겨둔다 (`00-aws-setup`에서 이미 정한 원칙과 같다).
+`apigateway:*`는 다른 statement들보다 의도적으로 넓다. 처음엔 `/apis*`로 좁혀서 시작했는데, API 생성 직후 태깅 호출(`POST /tags/...`)이 `/apis`가 아니라 `/tags`라는 별도 리소스 경로를 쓰면서 막혔다 — API Gateway v2는 `/apis`, `/tags`, `/restapis` 등 기능별로 리소스 경로가 나뉘어 있어서, 하나씩 맞추는 대신 리전 전체로 넓혔다 (`00-aws-setup`에서 정한 편의 우선 원칙과 같은 맥락). 실제 겪은 에러:
+
+![apigateway:POST(/tags) 및 lambda:GetFunctionCodeSigningConfig AccessDenied 에러](screenshots/001E_auth_error.png)
 
 적용 방법은 [iam/README.md](../../iam/README.md) 참고 (managed policy version 갱신).
 
 ## 5. Terraform 적용
+
+40단계 스캐폴딩이 준비된 뒤 `terraform plan`으로 먼저 확인했다:
+
+![40단계 스캐폴딩 파일 요약 및 terraform plan(9 to add) 확인](screenshots/000_infra_plan.png)
 
 ```powershell
 cd infra
@@ -136,6 +142,10 @@ terraform apply
 ```
 
 `plan`에서 9개 리소스(IAM Role, Role Policy, Role Policy Attachment, Lambda Function, API Gateway API/Integration/Route/Stage, Lambda Permission)가 추가되는지 확인한다.
+
+권한 갱신 후 재시도한 apply 완료 결과 (`api_endpoint` 포함 outputs):
+
+![apply complete, 6 added, api_endpoint 등 outputs 확인](screenshots/002_grant_auth.png)
 
 ## 6. curl로 테스트
 
