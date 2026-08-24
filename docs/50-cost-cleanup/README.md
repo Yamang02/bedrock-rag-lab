@@ -153,6 +153,10 @@ aws budgets describe-subscribers-for-notification \
 aws budgets describe-budget --account-id <ACCOUNT_ID> --budget-name bedrock-rag-lab-monthly-cap --profile bedrock-rag-lab
 ```
 
+콘솔에서도 확인했다 — `bedrock-rag-lab-monthly-cap`, 예산 $10.00, 사용된 금액 $0.00 (0.00%), 상태 정상.
+
+![AWS Budgets 콘솔 - bedrock-rag-lab-monthly-cap, 예산 $10, 사용 $0](screenshots/000_budget_console.png)
+
 ## 7. 실습 종료 후 리소스 정리
 
 모든 검증이 끝나면 과금 리소스를 정리한다. 순서는 의존성 역순(Knowledge Base/Data Source → S3 Vectors → Lambda/API Gateway → IAM Role → S3 Bucket)을 Terraform이 알아서 계산한다.
