@@ -147,6 +147,10 @@ aws s3 ls --profile bedrock-rag-lab
 - `terraform.tfstate`, `.terraform/`은 Git에 커밋하지 않는다 (`.gitignore` 확인).
 - 실습 종료 후 `terraform destroy`로 비용이 발생하는 리소스를 남기지 않는다.
 
+## 10-terraform-basic 완료
+
+`terraform init → plan → apply → aws s3 ls 확인 → terraform destroy`까지 확인했다. S3 버킷은 생성 후 삭제되어 현재 남아있는 과금 리소스는 없다.
+
 ## 다음 단계
 
 S3 Bucket 생성/삭제까지 확인되면, 이후 단계를 폭을 넓혀가며 진행한다.
