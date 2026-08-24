@@ -32,3 +32,8 @@ variable "vector_distance_metric" {
   type    = string
   default = "cosine"
 }
+
+variable "budget_alert_email" {
+  type        = string
+  description = "AWS Budgets 알림을 받을 이메일. terraform.tfvars에만 넣고 커밋하지 않는다."
+}
