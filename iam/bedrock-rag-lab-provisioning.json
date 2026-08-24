@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "BedrockKbRoleManage",
+      "Sid": "ProjectRoleManage",
       "Effect": "Allow",
       "Action": [
         "iam:CreateRole", "iam:GetRole", "iam:DeleteRole", "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags",
@@ -10,14 +10,21 @@
         "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies",
         "iam:ListInstanceProfilesForRole", "iam:RemoveRoleFromInstanceProfile", "iam:UpdateAssumeRolePolicy"
       ],
-      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/bedrock-rag-lab-kb-role"
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/bedrock-rag-lab-*"
     },
     {
       "Sid": "PassRoleToBedrock",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/bedrock-rag-lab-kb-role",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/bedrock-rag-lab-*",
       "Condition": { "StringEquals": { "iam:PassedToService": "bedrock.amazonaws.com" } }
+    },
+    {
+      "Sid": "PassRoleToLambda",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/bedrock-rag-lab-*",
+      "Condition": { "StringEquals": { "iam:PassedToService": "lambda.amazonaws.com" } }
     },
     {
       "Sid": "S3VectorsManage",
@@ -74,6 +81,35 @@
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel"],
       "Resource": "arn:aws:bedrock:ap-northeast-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
+    },
+    {
+      "Sid": "LambdaManage",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction", "lambda:GetFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
+        "lambda:DeleteFunction", "lambda:AddPermission", "lambda:RemovePermission", "lambda:GetPolicy",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:ListVersionsByFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"
+      ],
+      "Resource": "arn:aws:lambda:ap-northeast-2:<ACCOUNT_ID>:function:bedrock-rag-lab-*"
+    },
+    {
+      "Sid": "ApiGatewayManage",
+      "Effect": "Allow",
+      "Action": ["apigateway:*"],
+      "Resource": "arn:aws:apigateway:ap-northeast-2::*"
+    },
+    {
+      "Sid": "LambdaLogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups", "logs:DescribeLogStreams",
+        "logs:GetLogEvents", "logs:FilterLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/lambda/bedrock-rag-lab-*",
+        "arn:aws:logs:ap-northeast-2:<ACCOUNT_ID>:log-group:/aws/lambda/bedrock-rag-lab-*:*"
+      ]
     }
   ]
 }
