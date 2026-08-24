@@ -45,6 +45,15 @@ data "aws_iam_policy_document" "lambda_query_permissions" {
     sid       = "InvokeGenerationModel"
     effect    = "Allow"
     actions   = ["bedrock:InvokeModel"]
+    resources = [local.generation_model_arn, local.generation_base_model_arn_pattern]
+  }
+
+  # 생성 모델이 cross-region inference profile이라, retrieve_and_generate를 호출하는
+  # Lambda 자신도 profile 조회 권한이 필요하다 (KB Service Role과는 별개).
+  statement {
+    sid       = "GetGenerationInferenceProfile"
+    effect    = "Allow"
+    actions   = ["bedrock:GetInferenceProfile"]
     resources = [local.generation_model_arn]
   }
 }

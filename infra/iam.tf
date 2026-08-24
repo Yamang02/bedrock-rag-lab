@@ -45,10 +45,19 @@ data "aws_iam_policy_document" "bedrock_kb_permissions" {
   }
 
   statement {
-    sid       = "BedrockInvokeModels"
+    sid     = "BedrockInvokeModels"
+    effect  = "Allow"
+    actions = ["bedrock:InvokeModel"]
+    # generation_model_arn은 inference profile 자체, generation_base_model_arn_pattern은
+    # 그 profile이 라우팅하는 실제 리전들의 foundation model (cross-region inference 문서에서 요구).
+    resources = [local.embedding_model_arn, local.generation_model_arn, local.generation_base_model_arn_pattern]
+  }
+
+  statement {
+    sid       = "BedrockGetInferenceProfile"
     effect    = "Allow"
-    actions   = ["bedrock:InvokeModel"]
-    resources = [local.embedding_model_arn, local.generation_model_arn]
+    actions   = ["bedrock:GetInferenceProfile"]
+    resources = [local.generation_model_arn]
   }
 
   statement {

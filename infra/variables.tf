@@ -15,7 +15,12 @@ variable "embedding_model_id" {
 
 variable "generation_model_id" {
   type    = string
-  default = "anthropic.claude-3-haiku-20240307-v1:0"
+  default = "apac.amazon.nova-micro-v1:0"
+}
+
+variable "generation_base_model_id" {
+  type    = string
+  default = "amazon.nova-micro-v1:0"
 }
 
 variable "vector_dimension" {
