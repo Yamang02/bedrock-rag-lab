@@ -13,6 +13,11 @@ variable "embedding_model_id" {
   default = "amazon.titan-embed-text-v2:0"
 }
 
+variable "generation_model_id" {
+  type    = string
+  default = "anthropic.claude-3-haiku-20240307-v1:0"
+}
+
 variable "vector_dimension" {
   type    = number
   default = 1024

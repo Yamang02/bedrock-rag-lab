@@ -1,6 +1,7 @@
 locals {
   # Foundation model ARN은 계정 ID 없이 리전만으로 구성된다.
-  embedding_model_arn = "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.embedding_model_id}"
+  embedding_model_arn  = "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.embedding_model_id}"
+  generation_model_arn = "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.generation_model_id}"
 }
 
 resource "aws_bedrockagent_knowledge_base" "rag" {

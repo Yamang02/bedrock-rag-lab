@@ -45,10 +45,10 @@ data "aws_iam_policy_document" "bedrock_kb_permissions" {
   }
 
   statement {
-    sid       = "BedrockInvokeEmbeddingModel"
+    sid       = "BedrockInvokeModels"
     effect    = "Allow"
     actions   = ["bedrock:InvokeModel"]
-    resources = [local.embedding_model_arn]
+    resources = [local.embedding_model_arn, local.generation_model_arn]
   }
 
   statement {
